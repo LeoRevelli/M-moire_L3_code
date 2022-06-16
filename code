@@ -1,0 +1,1206 @@
+library(RColorBrewer)
+library(ggplot2)
+library(scales)
+library(reshape2)
+library(leaflet)
+library(ggmap)
+library(geojsonio)
+library(dplyr)
+library(plotly)
+library(labelled)
+library(knitr)
+library(kableExtra)
+library(foreach)
+library(tidyr)
+library(qpcR)
+library(tidyverse)
+library(lmtest)
+library(car)
+library(skedastic)
+library(tseries)
+library(gridExtra)
+
+
+#____________________________________________________________________________________________________________________________
+##### 1. Selection de l'échantillon #####
+#____________________________________________________________________________________________________________________________
+attach(X2021_COR_DIP_company_list)
+echantillon= matrix(data= "",1,4)%>% as.data.frame()
+colnames(echantillon)=c("company_id","company_name","NACE2","ISIC4")
+cor_dip=merge(X2021_COR_DIP_company_list,X2021_COR_DIP_company_financial)
+echantillon3=subset(cor_dip, Year==2018, select = c(Company_id, Company_name,Year, RD, EMP, NACE2, ISIC4))
+
+subset21 = subset(echantillon3, ISIC4==21, select = c(Company_id, Company_name,Year, RD, EMP, NACE2, ISIC4))
+
+subset72 = subset(echantillon3, ISIC4==72, select = c(Company_id, Company_name,Year, RD, EMP, NACE2, ISIC4))
+subset_pharma=bind_rows(subset21 , subset72)
+company_pharma_id=list(Company_id)
+
+#____________________________________________________________________________________________________________________________
+##### 2. Construction des graphiques #####
+#____________________________________________________________________________________________________________________________
+
+# 2.1. graphique R&D en fonction de l'entreprise ------------------------------------------
+attach(subset_pharma)
+pharma_id=unlist(company_pharma_id)
+ax1=c(0,pharma_id)
+ax2=c(0,5000,10000,15000,20000)
+par(family = "serif", mar = c(5, 4, 2, 0)+.1)
+plot(x = Company_id, 
+     y = RD,
+     xlim=c(1,2000), ylim=c(0,20000),
+     pch = 19,
+     cex = 0.7,
+     col = "darkblue",
+     main = "R&D par entreprise des secteurs ISIC4 21 et 72",
+     sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+     xlab = "Identifiant entreprise",
+     ylab = "R&D",
+     bty = "n", axes = FALSE)
+axis (1, at=ax1, labels=ax1, pos=0, col="black", las=0, tck=-0.01)
+axis (2, at=ax2, labels=ax2, pos=0, col="black", las=2, tck=-0.01)
+
+
+# 2.2. graphique dynamique EMP en fonction de l'entreprise --------------------------------
+
+attach(subset_pharma)
+ax1=c(0,pharma_id)
+ax2=c(0,10000,20000,30000,40000,50000,60000,70000,80000,90000,100000,110000,120000,130000,140000)
+par(family = "serif", mar = c(5, 4, 2, 0)+.1)
+plot(x = Company_id, 
+     y = EMP,
+     xlim=c(1,2000), ylim=c(0,135100),
+     pch = 19,
+     cex = 0.7,
+     col = "darkblue",
+     main = "Nombre d'employés par entreprise des secteurs ISIC4 21 et 72",
+     sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+     xlab = "Identifiant entreprise",
+     ylab = "Nombre d'employés",
+     bty = "n", axes = FALSE)
+axis (1, at=ax1, labels=ax1, pos=0, col="black", las=0, tck=-0.01)
+axis (2, at=ax2, labels=ax2, pos=0, col="black", las=2, tck=-0.01)
+
+
+# 2.3. graphique dynamique R&D en fonction de l'entreprise --------------------------------
+attach(subset_pharma)
+ggplot(subset_pharma, aes(x=Company_id, y=RD,  main = "R&D par entreprise des secteurs ISIC4 21 et 72",
+                          sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+                          xlab = "Identifiant entreprise",
+                          ylab = "R&D"))+
+  geom_point() +
+  scale_colour_manual(values=c("blue"))+
+  geom_smooth(method="lm", colour="red") 
+orange="darkorange4"
+blue="cornflowerblue"
+red="tomato"
+graph = ggplot(subset_pharma, aes(x=Company_id, y=RD, colour=ISIC4))+
+  geom_point()+
+  scale_colour_manual(values=c(orange,blue))+
+  geom_smooth(method="lm", colour="black") 
+ggplotly(graph)
+
+
+# 2.4. graphique dynamique nombre d'employés par entreprise --------------------------------
+graph = ggplot(subset_pharma, aes(x=Company_id, y=EMP, colour=ISIC4))+
+  geom_point()+
+  scale_colour_manual(values=c(orange,blue))+
+  geom_smooth(method="lm", colour="black") 
+
+library(plotly)
+ggplotly(graph)
+
+summary(subset_pharma)
+
+# 2.5. Construction de tableaux Latex -------------------------------------------------------
+look_for(subset_pharma)
+
+subset_pharma %>%
+  kable("latex", longtable = TRUE, booktabs = TRUE) %>%
+  kable_styling(latex_options =c("repeat_header"))
+#____________________________________________________________________________________________________________________________
+##### 3. données sur les brevets#####
+#____________________________________________________________________________________________________________________________
+echantillonp= matrix(data= "",1,2)%>% as.data.frame()
+colnames(echantillonp)=c("company_id","patent_appln_id")
+attach(X2021_COR_DIP_patent_portfolio)
+pharma=c(pharma_id)
+echantillonp=subset(X2021_COR_DIP_patent_portfolio, Company_id %in% pharma, select = c(Company_id, Patent_appln_id,Publn_auth,Patent_publn_nr,Patent_filing_date,Inpadoc_family_id, Family_filing_date, IP5_2_offices, is_green))
+
+summary(echantillonp)
+attach(echantillonp)
+ggplot(echantillonp, aes(x=Company_id, y=Patent_appln_id,  main = "Brevets déposés par entreprise des secteurs ISIC4 21 et 72",
+                         sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+                         xlab = "Identifiant entreprise",
+                         ylab = "Brevets"))+
+  geom_point() +
+  scale_colour_manual(values=c("blue"))+
+  geom_smooth(method="lm", colour="red") 
+
+graph = ggplot(subset_pharma, aes(x=Company_id, y=RD, colour=ISIC4))+
+  geom_point()+
+  scale_colour_manual(values=c(orange,blue))+
+  geom_smooth(method="lm", colour="black") 
+
+library(plotly)
+ggplotly(graph)
+
+
+attach(echantillonp)
+dateb=as.Date("2018-12-31")
+datea=as.Date("2018-01-01")
+year= datea : dateb
+echantillonp2018=subset(echantillonp, Patent_filing_date %in% year, select = c(Company_id, Patent_appln_id,Publn_auth,Patent_publn_nr,Patent_filing_date,Inpadoc_family_id, Family_filing_date, IP5_2_offices, is_green))
+ggplot(echantillonp2018, aes(x=Company_id, y=Patent_appln_id,  main = "Brevets déposés par entreprise des secteurs ISIC4 21 et 72 (2018)",
+                             sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+                             xlab = "Identifiant entreprise",
+                             ylab = "Brevets"))+
+  geom_point() +
+  scale_colour_manual(values=c("blue"))
+orange="darkorange4"
+blue="cornflowerblue"
+red="tomato"
+graph = ggplot(subset_pharma, aes(x=Company_id, y=RD, colour=ISIC4))+
+  geom_point()+
+  scale_colour_manual(values=c(orange,blue))+
+  geom_smooth(method="lm", colour="black") 
+
+graph_brevets = ggplot(echantillonp2018, aes(x=Company_id, y=Patent_appln_id))+
+  geom_point()
+
+library(plotly)
+ggplotly(graph_brevets)
+#_______________________________________________________________________________________________________________________________________
+##### 4. Nombre moyen de brevets par entreprise de l'échantillon #####
+#_______________________________________________________________________________________________________________________________________
+attach(echantillonp2018)
+companyep2018=unique(Company_id)
+attach(echantillonp)
+companyep=unique(Company_id)
+attach(X2021_COR_DIP_patent_portfolio)
+companyX2021=unique(Company_id)
+print(length(companyX2021))
+
+print(pharma)  #company_id 45 pas de brevets en 2018 ?
+patents452018=subset(echantillonp2018, Company_id==2018, select = c(Company_id, Patent_appln_id,Publn_auth,Patent_publn_nr,Patent_filing_date,Inpadoc_family_id, Family_filing_date, IP5_2_offices, is_green))
+print(patents452018)
+attach(echantillonp2018)
+brevets=unique(Patent_appln_id)
+mean_patents_by_firm=length(brevets)/length(pharma_id)
+abs((22337/314)*100)==abs(mean_patents_by_firm*100)
+22337/314
+print(length(brevets))
+print(brevets)
+
+attach(X2021_COR_DIP_patent_portfolio)
+brevets_all=unique(Patent_appln_id)
+print(length(brevets_all))
+mean_patents_by_firm_all=length(brevets_all)/2000
+print(mean_patents_by_firm_all)
+
+attach(X2021_COR_DIP_patent_portfolio)
+brevets_all=unique(Patent_appln_id)
+attach(X2021_COR_DIP_company_list)
+sectorsISIC4_all=unique(ISIC4)
+sectorsNACE2_all=unique(NACE2)
+print(length(brevets_all))
+print(length(sectorsISIC4_all))
+print(length(sectorsNACE2_all))
+mean_patents_by_ISIC4_all=length(brevets_all)/length(sectorsISIC4_all)
+mean_patents_by_NACE2_all=length(brevets_all)/length(sectorsNACE2_all)
+print(mean_patents_by_ISIC4_all)
+print(mean_patents_by_NACE2_all)
+
+mean_patents_by_NACE2_all
+print(mean_patents_by_firm_all)
+
+summary(subset_pharma) 
+summary(X2021_COR_DIP_company_financial)
+summary(subset21)
+summary(subset72)
+
+attach(subset_pharma)
+sum(RD)
+attach(X2021_COR_DIP_company_financial)
+sum(RD)
+
+library(tidyr)
+Company_financial=X2021_COR_DIP_company_financial
+Company_financial<-Company_financial %>% drop_na(RD)
+Company_financial <- Company_financial[complete.cases(Company_financial$RD),]
+attach(Company_financial)
+sum(RD)
+Company_financial2=subset(X2021_COR_DIP_company_financial, Year==2018, select = c(Company_id, Year, RD, NS, EMP, CAPEX, OP))
+Company_financial3 <- Company_financial2[complete.cases(Company_financial2$RD),]
+attach(Company_financial3)
+sum(RD)
+
+subset21_ttyear = subset(cor_dip, ISIC4==21, select = c(Company_id, Company_name,Year, RD, EMP, NACE2, ISIC4))
+subset72_ttyear = subset(cor_dip, ISIC4==72, select = c(Company_id, Company_name,Year, RD, EMP, NACE2, ISIC4))
+subset_ttyear=bind_rows(subset21_ttyear , subset72_ttyear)
+subset_ttyear_sansNA <- subset_ttyear[complete.cases(subset_ttyear$RD),]
+attach(subset_ttyear_sansNA)
+sum(RD)
+#_________________________________________________________________________________________________________________________________________
+##### 5. Données sur les employés #####
+#_________________________________________________________________________________________________________________________________________
+library(dplyr)
+library(tidyr)
+attach(subset_pharma)
+subset_pharma_sans_na <- subset_pharma %>% drop_na(EMP)
+attach(subset_pharma_sans_na)
+sum(EMP)
+subset_ttyear_sansNA_EMP <- subset_ttyear %>% drop_na(EMP)
+attach(subset_ttyear_sansNA_EMP)
+sum(EMP)
+subset_tt_sansNA_EMP <- X2021_COR_DIP_company_financial %>% drop_na(EMP)
+attach(subset_tt_sansNA_EMP)
+sum(EMP)
+subset2018_sansNA_EMP <- echantillon3 %>% drop_na(EMP)
+attach(subset2018_sansNA_EMP)
+sum(EMP)
+subset21_sansNA2018 <- subset21 %>% drop_na(EMP)
+attach(subset21_sansNA2018)
+sum(EMP)
+subset21_ttyear_sansNA <- subset21_ttyear %>% drop_na(EMP)
+attach(subset21_ttyear_sansNA)
+sum(EMP)
+subset72_sansNA2018 <- subset72 %>% drop_na(EMP)
+attach(subset72_sansNA2018)
+sum(EMP)
+subset72_ttyear_sansNA <- subset72_ttyear %>% drop_na(EMP)
+attach(subset72_ttyear_sansNA)
+sum(EMP)
+
+summary(subset_pharma_sans_na)
+summary(subset_ttyear_sansNA_EMP)
+summary(subset_tt_sansNA_EMP)
+summary(subset2018_sansNA_EMP)
+summary(subset21_sansNA2018)
+summary(subset21_ttyear_sansNA)
+summary(subset72_sansNA2018)
+summary(subset72_ttyear_sansNA)
+#_______________________________________________________________________________________________________________________________________
+##### 6. Stock externe de RD #####
+#_______________________________________________________________________________________________________________________________________
+attach(subset_pharma)
+j=sum(RD)
+for (i in company_pharmaid)
+{RDextern314 <- j-RD}
+summary(RDextern314)
+
+attach(subset21)
+j21=sum(RD)
+subset21_company=unique(Company_id)
+for (i in subset21_company){
+  RDextern21 <- j-RD
+}
+summary(RDextern21)
+Rdextern21=bind_cols(subset21_company, RDextern21)
+colnames(Rdextern21)[1] <- "Company_id"
+colnames(Rdextern21)[2] <- "RD_extern_by_sector"
+
+
+attach(subset72)
+j72=sum(RD)
+subset72_company= unique(Company_id)
+for (i in subset72_company){
+  RDextern72 <- j72-RD
+}
+summary(RDextern72)
+Rdextern72=bind_cols(subset72_company, RDextern72)
+colnames(Rdextern72)[1] <- "Company_id"
+colnames(Rdextern72)[2] <- "RD_extern_by_sector"
+
+RDextern_by_sector=bind_rows(Rdextern21, Rdextern72)
+
+subset_ttyear_sansNA_RD <- cor_dip %>% drop_na(RD)
+attach(subset_ttyear_sansNA_RD)
+jall=sum(RD)
+subset_all_companies= (unique(Company_id))
+for (i in subset_all_companies){
+  RDexternall <-jall-RD
+}
+summary(RDexternall)
+
+attach(echantillon3)
+j2018all=sum(RD)
+subset_2018= unique(Company_id)
+for (i in subset_2018){
+  RDextern2018 <- j2018all - RD
+}
+summary(RDextern2018)
+RD_pharma_by_sector= bind_rows(RDextern72, RDextern21)
+subset_pharma1= bind_cols(subset_pharma, RDextern314)
+colnames(subset_pharma1)[8] <- "RD_extern"
+
+#_______________________________________________________________________________________________________________________________________
+##### 7. Stock de publication par entreprises #####
+#_______________________________________________________________________________________________________________________________________
+attach(X2019_COR_DIP_publications)
+df<-X2019_COR_DIP_publications%>%dplyr::select(-ASJC)
+publication_stock<-df%>%group_by(Company_id)%>%summarise_all(funs(sum))
+publication_stock_pharma=subset(publication_stock, Company_id %in% company_pharmaid_, select = c(Company_id, Publication_year, Sc_Pubs))
+pharma_pub_stock <- subset (publication_stock_pharma, select = -Publication_year)
+subset_pharma2 <- merge(subset_pharma1, pharma_pub_stock,
+                        by = "Company_id",
+                        all = TRUE)
+subset_pharma2[is.na(subset_pharma2)] <- 0 
+subset_pharma4<- subset_pharma2 %>% drop_na(RD)
+#_______________________________________________________________________________________________________________________________________
+###### 8. Co-dépôt de brevets #####
+#_______________________________________________________________________________________________________________________________________
+# 8.1. Stock de connaissances et co-dépôt de brevets -----------------------------------------------
+attach(X2021_COR_DIP_patent_portfolio)
+duplicated(Patent_appln_id)
+b<-Patent_appln_id[duplicated(Patent_appln_id)]
+Co_company <- subset(X2021_COR_DIP_patent_portfolio, Patent_appln_id %in% b, select = c(Company_id, Patent_appln_id, Publn_auth, Patent_publn_nr, Patent_filing_date, Inpadoc_family_id, Family_filing_date, IP5_2_offices, is_green))
+attach(Co_company)
+RJVs_company=list(unique(Company_id))
+RJVs_companies=c(unlist(RJVs_company))
+un=list(rep(1, 806))
+RJVs_companies_df=bind_cols(RJVs_companies, un)
+colnames(RJVs_companies_df)[1] <- "Company_id"
+colnames(RJVs_companies_df)[2] <- "RJV_member"
+RJV_pharma=subset(RJVs_companies_df, Company_id %in% company_pharmaid_, select = c(Company_id, RJV_member))
+
+#patent pool
+un31=list(rep(1, 31))
+licensor=c(1614,1529,1953,1471,1615,803,810,806,1144,800,167,805,695,796,1261,804,783,809,234,1530,681,1873,1091,1532,463,101,601,673,986,455,607)
+pharma_pool=subset(X2021_COR_DIP_company_list, Company_id %in% licensor, select = c(Company_id))
+pharma_pool=bind_cols(pharma_pool, un31)
+colnames(pharma_pool)[2] <- "Patent pool participation"
+# 8.2. Co-depot de brevets et stock de connaissances externes ---------------------------------------
+coE1=subset(Co_company, Company_id==1 , select = c(Company_id, Patent_appln_id, Publn_auth, Patent_publn_nr, Patent_filing_date, Inpadoc_family_id, Family_filing_date, IP5_2_offices, is_green))
+attach(coE1)
+coP1=unique(Patent_appln_id)
+RDcompanies1=subset(X2021_COR_DIP_patent_portfolio, Patent_appln_id %in% coP1, select = c(Company_id, Patent_appln_id, Publn_auth, Patent_publn_nr, Patent_filing_date, Inpadoc_family_id, Family_filing_date, IP5_2_offices, is_green))
+attach(RDcompanies1)
+RDE1=unique(Company_id)
+RDidcoe1=subset(X2021_COR_DIP_company_financial, Company_id %in% RDE1, select = c(Company_id, Year, RD, NS, EMP, CAPEX, OP))
+RDidcoe1_2018=subset(RDidcoe1, Year==2018, select = c(Company_id, Year, RD, NS, EMP, CAPEX, OP))
+attach(RDidcoe1_2018)
+jcoE1=sum(RD)
+subset_coE1= unique(Company_id)
+for (i in subset_coE1){
+  RDexterncoE1 <- jcoE1 - RD
+}
+
+coE12=subset(Co_company, Company_id==12 , select = c(Company_id, Patent_appln_id, Publn_auth, Patent_publn_nr, Patent_filing_date, Inpadoc_family_id, Family_filing_date, IP5_2_offices, is_green))
+attach(coE12)
+coP12=unique(Patent_appln_id)
+RDcompanies12=subset(X2021_COR_DIP_patent_portfolio, Patent_appln_id %in% coP12, select = c(Company_id, Patent_appln_id, Publn_auth, Patent_publn_nr, Patent_filing_date, Inpadoc_family_id, Family_filing_date, IP5_2_offices, is_green))
+attach(RDcompanies12)
+RDE12=unique(Company_id)
+RDidcoe12=subset(X2021_COR_DIP_company_financial, Company_id %in% RDE12, select = c(Company_id, Year, RD, NS, EMP, CAPEX, OP))
+RDidcoe12_2018=subset(RDidcoe12, Year==2018, select = c(Company_id, Year, RD, NS, EMP, CAPEX, OP))
+attach(RDidcoe12_2018)
+jcoE12=sum(RD)
+subset_coE12= unique(Company_id)
+for (i in subset_coE12){
+  RDexterncoE12 <- jcoE12 - RD
+}
+
+attach(Co_company)
+Company_cobrevets=unique(Company_id)
+Co_Company_RD=subset(X2021_COR_DIP_company_financial, Company_id %in% Company_cobrevets, select = c(Company_id, RD, Year))
+Co_Company_RD_1=subset(Co_Company_RD, Year==2018, select = c(Company_id, RD))
+COmpany_RD <- merge(Co_Company_RD_1, Co_company)
+s <- split(Co_company, Co_company$Patent_appln_id)
+s1 <- split(COmpany_RD, COmpany_RD$Patent_appln_id)
+
+DFRD <- echantillon3%>%dplyr::select(Company_id,RD)
+DFRD <- subset(DFRD, Company_id %in% Company_cobrevets, select = c(Company_id, RD))
+colnames(DFRD)[1] <- "codep"
+colnames(Codep_1_)[1] <- "Company_id"
+DF2 <- merge(DFRD, Codep_1_, by="codep")
+DF2 <- DF2%>%dplyr::select(Company_id,RD,codep)
+extern_stock_by_codepot<-DF2%>%group_by(Company_id)%>%summarise_all(funs(sum))
+extern_stock_by_codepot <- extern_stock_by_codepot %>%dplyr::select(Company_id,RD)
+c=c(1:2000)
+zero=list(rep(0,2000))
+c=bind_cols(c,zero)
+colnames(c)=c("Company_id","RD")
+extern_stock_by_codepot=bind_rows(extern_stock_by_codepot,c)
+extern_stock_by_codepot= extern_stock_by_codepot%>%group_by(Company_id)%>%summarise_all(funs(sum))
+colnames(extern_stock_by_codepot)[2] <- "Co_filing_RD"
+#__________________________________________________________________________________________________________________________________________
+##### 9. Echantillon pour régression #####
+#__________________________________________________________________________________________________________________________________________
+
+# 9.1. Df pour (presque) régression -------------------------------------------------
+subset_pharma_ <- merge(subset_pharma2, RJV_pharma,
+                        by = "Company_id",
+                        all = TRUE)
+subset_pharma_ <- merge(subset_pharma_, RDextern_by_sector,
+                        by = "Company_id",
+                        all = TRUE)
+subset_pharma_[is.na(subset_pharma_)] <- 0
+subset_pharma_ <- merge(subset_pharma_, pharma_pool,
+                        by = "Company_id",
+                        all = TRUE)
+subset_pharma_[is.na(subset_pharma_)] <- 0
+
+cor_dip1 <- merge(cor_dip, RJVs_companies_df,
+                  by = "Company_id",
+                  all = TRUE)
+cor_dip1[is.na(cor_dip1)] <- 0 
+attach(cor_dip1)
+sum(RJV_member)
+
+pharma_extern_stock_by_codepot=subset(extern_stock_by_codepot, Company_id %in% company_pharmaid_, select=c("Company_id","Co_filing_RD"))
+subset_pharma_ <- merge(subset_pharma_, pharma_extern_stock_by_codepot,
+                        by="Company_id",
+                        all=TRUE)
+colnames(subset_pharma_)[8] <- "RD_extern_simple"
+undeux=list(rep(1,314))
+subset_pharma__= bind_cols(subset_pharma_, undeux)
+colnames(subset_pharma__)[14]="un"
+subset_pharmay=subset_pharma__$Sc_Pubs + subset_pharma__$un
+subset_pharma__= bind_cols(subset_pharma__, subset_pharmay)
+colnames(subset_pharma__)[15]="SC_pubs+1"
+subset_pharmaz=subset_pharma__$Co_filing_RD + subset_pharma__$un
+subset_pharma__= bind_cols(subset_pharma__, subset_pharmaz)
+colnames(subset_pharma__)[16]="Co_filing_RD+1"
+subset_pharmaw=subset_pharma__$EMP + subset_pharma__$un
+subset_pharma__= bind_cols(subset_pharma__, subset_pharmaw)
+colnames(subset_pharma__)[17]="EMP+1"
+subset_final<-subset_pharma__%>%dplyr::select(-un, -Sc_Pubs, -Co_filing_RD, -EMP)
+subset_pharma__= bind_cols(subset_pharma__, subset_pharmaw)
+colnames(subset_pharma__)[17]="EMP+1"
+
+write.csv(subset_final, "subset_final.csv")
+# 9.2. Tableau échantillon (presque) final -------------------------------------------
+
+library(knitr)
+library(kableExtra)
+options("digits"=7)
+subset_pharma4 <- sapply(subset_pharma3, RD)
+subset_pharma3[subset_pharma4] <- lapply(subset_pharma3[subset_pharma4], round, 5)
+subset_pharma3 %>%
+  kable("latex", longtable = TRUE, booktabs = TRUE) %>%
+  kable_styling(latex_options =c("repeat_header"))
+
+summary(subset_pharma3)
+
+stat_des[is.na(stat_des)] <- 0
+library(knitr)
+library(kableExtra)
+stat_des %>%
+  kable("latex", longtable = TRUE, booktabs = TRUE) %>%
+  kable_styling(latex_options =c("repeat_header"))
+#____________________________________________________________________________________________________________________________
+#### 10. Graphiques (bis) ####
+#____________________________________________________________________________________________________________________________
+graph_publications = ggplot(subset_pharma3, aes(x=Company_id, y=Sc_Pubs, colour=ISIC4))+
+  geom_point()+
+  scale_colour_manual(values=c(orange,blue))
+
+library(plotly)
+ggplotly(graph_publications)
+
+attach(subset_pharma3)
+count(Sc_Pubs)
+
+write.csv(subset_pharma_, "subset_pharma_.csv")
+attach(X2021_COR_DIP_company_list)
+country=unique(Ctry_Code)
+print(country)
+
+Co_Company_ctry_code=subset(X2021_COR_DIP_company_list, Company_id %in% company_pharmaid_, select = c(Company_id, Ctry_Code))
+attach(Co_Company_ctry_code)
+country=unique(Ctry_Code)
+print(country)
+
+# 10.1. Number of patent application according to R&D --------------------------------------------
+attach(final_subset)
+par(family = "serif", mar = c(5, 4, 2, 0)+.1)
+plot(x = RD, 
+     y = Number_of_patents ,
+     xlim=c(1,10000), ylim=c(1,5000),
+     pch = 19,
+     cex = 0.7,
+     col = "darkblue",
+     main = "Number of patent application according to R&D",
+     sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+     xlab = "RD (in millions of euros)",
+     ylab = "Number of patents",
+     bty = "n", axes = FALSE)
+axis (1, at=c(1,10000), labels=c(1,10000), pos=0, col="black", las=0, tck=-0.01)
+axis (2, at=c(0,5000), labels=c(1,5000), pos=0, col="black", las=2, tck=-0.01)
+
+attach(final_subset)
+ggplot(final_subset, aes(x=RD, y=Number_of_patents,  main = "Number of patent application according to R&D",
+                         sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+                         xlab = "RD (in millions of euros)",
+                         ylab = "Number of patents"))+
+  geom_point() +
+  scale_colour_manual(values=c("darkblue"))+
+  geom_smooth(method="lm", colour="red") 
+
+#10.2. Number of patent application according to the number of employees----------------------------------------------------
+attach(final_subset)
+par(family = "serif", mar = c(5, 4, 2, 0)+.1)
+plot(x = `EMP+1`, 
+     y = Number_of_patents ,
+     xlim=c(1,136000), ylim=c(0,5000),
+     pch = 19,
+     cex = 0.7,
+     col = "darkblue",
+     main = "Number of patent application according to the number of employees",
+     sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+     xlab = "Number of employees",
+     ylab = "Nombre de brevets",
+     bty = "n", axes = FALSE)
+axis (1, at=c(1,136000), labels=c(1,136000), pos=0, col="black", las=0, tck=-0.01)
+axis (2, at=c(0,5000), labels=c(0,5000), pos=0, col="black", las=2, tck=-0.01)
+
+attach(final_subset)
+ggplot(final_subset, aes(x=`EMP+1`, y=Number_of_patents,  main = "Number of patent application according to the number of employees",
+                         sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+                         xlab = "Number of employees",
+                         ylab = "Number of patents"))+
+  geom_point() +
+  scale_colour_manual(values=c("blue"))+
+  geom_smooth(method="lm", colour="red") 
+
+#10.3. Number of patent application according to the number scientific publications---------------------------------------
+attach(final_subset)
+par(family = "serif", mar = c(5, 4, 2, 0)+.1)
+plot(x = `SC_pubs+1`, 
+     y = Number_of_patents ,
+     xlim=c(1,6400), ylim=c(0,5000),
+     pch = 19,
+     cex = 0.7,
+     col = "darkblue",
+     main = "Number of patent application according to the number scientific publications",
+     sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+     xlab = "Number of scientific publications",
+     ylab = "Number of patents",
+     bty = "n", axes = FALSE)
+axis (1, at=c(1,6400), labels=c(1,6400), pos=0, col="black", las=0, tck=-0.01)
+axis (2, at=c(0,5000), labels=c(0,5000), pos=0, col="black", las=2, tck=-0.01)
+attach(final_subset)
+ggplot(final_subset, aes(x=`SC_pubs+1`, y=Number_of_patents,  main = "Number of patent application according to the number of scientific publications",
+                         sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+                         xlab = "Number of scientific publications",
+                         ylab = "Number of patents"))+
+  geom_point() +
+  scale_colour_manual(values=c("blue"))+
+  geom_smooth(method="lm", colour="red") 
+
+# 10.4. Number of patent application according to the participation to a pool --------------------------------------------------------
+attach(final_subset)
+par(family = "serif", mar = c(5, 4, 2, 0)+.1)
+plot(x = `Patent pool participation`, 
+     y = Number_of_patents ,
+     xlim=c(0,1), ylim=c(0,5000),
+     pch = 19,
+     cex = 0.7,
+     col = "darkblue",
+     main = "Number of patent application according to the participation to a pool",
+     sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+     xlab = "Participation to a patent pool",
+     ylab = "Number of patents",
+     bty = "n", axes = FALSE)
+axis (1, at=c(0,1), labels=c(0,1), pos=0, col="black", las=0, tck=-0.01)
+axis (2, at=c(0,5000), labels=c(0,5000), pos=0, col="black", las=2, tck=-0.01)
+
+#10.5. Number of patent application according to the external R&D (simple calculation)----------------------------------
+attach(final_subset)
+par(family = "serif", mar = c(5, 4, 2, 0)+.1)
+plot(x = RD_extern_simple, 
+     y = Number_of_patents ,
+     xlim=c(134000,145000), ylim=c(0,5000),
+     pch = 19,
+     cex = 0.7,
+     col = "darkblue",
+     main = "Number of patent application according to the external R&D (simple calculation)",
+     sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+     xlab = "External R&D",
+     ylab = "Number of patents",
+     bty = "n", axes = FALSE)
+axis (1, at=c(134000,145000), labels=c(135000,145000), pos=0, col="black", las=0, tck=-0.01)
+axis (2, at=c(0,5000), labels=c(0,5000), pos=134000, col="black", las=2, tck=-0.01)
+
+attach(final_subset)
+ggplot(final_subset, aes(x=RD_extern_simple, y=Number_of_patents,  main = "Number of patent application according to the external R&D (simple calculation)",
+                         sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+                         xlab = "R&D",
+                         ylab = "Number of patents"))+
+  geom_point() +
+  scale_colour_manual(values=c("blue"))+
+  geom_smooth(method="lm", colour="red") 
+
+#10.6. Number of patent application according to the external R&D (calculation by sector)---------------------------
+attach(final_subset)
+par(family = "serif", mar = c(5, 4, 2, 0)+.1)
+plot(x = RD_extern_by_sector, 
+     y = Number_of_patents ,
+     xlim=c(7500,145000), ylim=c(0,5000),
+     pch = 19,
+     cex = 0.7,
+     col = "darkblue",
+     main = "Number of patent application according to the external R&D (calculation by sector)",
+     sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+     xlab = "External R&D",
+     ylab = "Number of patents",
+     bty = "n", axes = FALSE)
+axis (1, at=c(7500,145000), labels=c(7500,145000), pos=0, col="black", las=0, tck=-0.01)
+axis (2, at=c(0,5000), labels=c(0,5000), pos=7500, col="black", las=2, tck=-0.01)
+attach(final_subset)
+ggplot(final_subset, aes(x=RD_extern_by_sector, y=Number_of_patents,  main = "Number of patent application according to the external R&D (calculation by sectors)",
+                         sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+                         xlab = "R&D",
+                         ylab = "Number of patents"))+
+  geom_point() +
+  scale_colour_manual(values=c("blue"))+
+  geom_smooth(method="lm", colour="red") 
+
+# 10.7. Number of patent application according to the external R&D (Calculation by patent co-filing groups) ----------------
+attach(final_subset)
+par(family = "serif", mar = c(5, 4, 2, 0)+.1)
+plot(x = `Co_filing_RD+1`, 
+     y = Number_of_patents ,
+     xlim=c(0,145000), ylim=c(0,5000),
+     pch = 19,
+     cex = 0.7,
+     col = "darkblue",
+     main = "Number of patent application according to the external R&D (Calculation by patent co-filing groups)",
+     sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+     xlab = "External R&D",
+     ylab = "Number of patents",
+     bty = "n", axes = FALSE)
+axis (1, at=c(0,145000), labels=c(0,145000), pos=0, col="black", las=0, tck=-0.01)
+axis (2, at=c(0,5000), labels=c(0,5000), pos=0, col="black", las=2, tck=-0.01)
+
+attach(final_subset)
+ggplot(final_subset, aes(x=`Co_filing_RD+1`, y=Number_of_patents,  main = "Number of patent application according to the external R&D (Calculation by patent co-filing groups)",
+                         sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+                         xlab = "R&D",
+                         ylab = "Number of patents"))+
+  geom_point() +
+  scale_colour_manual(values=c("blue"))+
+  geom_smooth(method="lm", colour="red") 
+
+#_______________________________________________________________________________________________________________________________________
+#### 11. Nombre de brevets ####
+#_______________________________________________________________________________________________________________________________________
+bt=subset(X2021_COR_DIP_patent_portfolio, select = c(Company_id, Patent_appln_id, Patent_filing_date))
+attach(bt)
+uu=unique(Patent_appln_id)
+print(length(uu))
+bt$Patent_filing_date=substr(bt$Patent_filing_date, start=1 , stop = 4)
+year1= c(2018,2019,2020)
+btt <- subset(bt, Patent_filing_date==2018, select = c(Company_id, Patent_appln_id, Patent_filing_date))
+attach(btt)
+uuu=unique(Company_id)
+length(uuu)
+btt_pharma <- subset(btt, Company_id %in% company_pharmaid_, select = c(Company_id, Patent_appln_id, Patent_filing_date))
+attach(btt_pharma)
+u_u=unique(Company_id)
+print(length(u_u))
+bttt <- subset(bt, Patent_filing_date %in% year1, select = c(Company_id, Patent_appln_id, Patent_filing_date))
+attach(bttt)
+uuuu=unique(Company_id)
+print(length(uuuu))
+bttt_pharma <- subset(bttt, Company_id %in% company_pharmaid_, select = c(Company_id, Patent_appln_id, Patent_filing_date))
+attach(bttt_pharma)
+u_=unique(Company_id)
+print(length(u_))
+print(length(Company_id))
+un32833=list(rep(1, 32833))
+bttt_pharma_ <- bind_cols(bttt_pharma,un32833)
+colnames(bttt_pharma_)[4] <- "un"
+bttt_pharma_[is.na(bttt_pharma_)] <- 1
+brevets_pharma <- subset(bttt_pharma_, select = c(Company_id, un))
+brevets_pharma_<-brevets_pharma%>%group_by(Company_id)%>%summarise_all(funs(sum))
+brevets_pharma_2 <- merge(subset_final, brevets_pharma_, all=TRUE)
+subset_final <- merge(subset_final, brevets_pharma_, all=TRUE)
+subset_final[is.na(subset_final)] <- 0
+colnames(subset_final)[14]="Nombre_brevets"
+un=list(rep(1,314))
+subset_final_2=bind_cols(subset_final, un)
+colnames(subset_final_2)[15]="un"
+subset_pharmav=subset_final_2$`Nombre_brevets` + subset_final_2$un
+final_subset= bind_cols(subset_final_2, subset_pharmav)
+colnames(final_subset)[16]="Number_of_patents"
+colnames(final_subset)[14]="Nombre_brevets"
+final_subset<-final_subset%>%dplyr::select(-un, -Nombre_brevets)
+colnames(final_subset)[8]="Patent_co_filing"
+colnames(final_subset)[10]="Patent_pool_participation"
+country_=subset(X2021_COR_DIP_company_list, select=c(Company_id, Ctry_Code))
+Country_=subset(country_, Company_id %in% company_pharmaid_ ,select=c(Company_id, Ctry_Code))
+final_subset=merge(final_subset, Country_ , by="Company_id", all=TRUE)
+write.csv(final_subset, "final_subset_.csv")
+
+final_subset_1<- final_subset
+colnames(final_subset_1)[7] <- "RD_extern_A"
+colnames(final_subset_1)[9] <- "RD_extern_B"
+colnames(final_subset_1)[12] <- "RD_extern_C"
+colnames(final_subset_1)[13] <- "EMP+1"
+write.csv(final_subset_1, "final_subset_1_off.csv")
+
+#___________________________________________________________________________________________________________________________________________
+#### 12.Stats descriptives patent pool participation // Patent co-filing ####
+#___________________________________________________________________________________________________________________________________________
+# 12.1. Stats descriptives patent pool participation -------------------------------------------
+attach(pharma_pool)
+participants=unique(Company_id)
+ppp <- subset(final_subset, Company_id %in% participants, select=c("Company_id", "Number_of_patents","EMP+1","RD", "Patent_pool_participation", "Patent_co_filing"))
+summary(ppp)
+
+#12.2. Stats descriptives patent co-filing -----------------------------------------------------
+attach(RJV_pharma)
+co_filers=unique(Company_id)
+pcf <- subset(final_subset, Company_id %in% co_filers, select=c("Company_id", "Number_of_patents","EMP+1","RD", "Patent_pool_participation", "Patent_co_filing"))
+attach(final_subset)
+sum(Patent_co_filing)
+summary(pcf)
+
+# 12.3. Patent co-filing and country -----------------------------------------------------------
+attach(X2021_COR_DIP_patent_portfolio)
+coop_country=subset(X2021_COR_DIP_patent_portfolio, select=c(Company_id,Publn_auth))
+un1477845=list(rep(1,1477845))
+coop_country2=bind_cols(coop_country,un1477845)
+colnames(coop_country2)[3]="un"
+attach(coop_country2)
+print(unique(Publn_auth))
+coop_country3<-coop_country2%>%group_by(Company_id)%>%summarise_all(funs(sum))
+
+attach(X2021_COR_DIP_company_list)
+country_=subset(X2021_COR_DIP_company_list, select=c(Company_id, Ctry_Code))
+un2000=list(rep(1,2000))
+coop_country2=bind_cols(country_,un2000)
+colnames(coop_country2)[3] <- "un"
+coop_country3<-coop_country2%>%group_by(Ctry_Code)%>%summarise_all(funs(sum))
+COuntry= subset(country_, Company_id %in% company_pharmaid_, select=c("Company_id", "Ctry_Code"))
+un314=list(rep(1,314))
+COuntry_=bind_cols(COuntry, un314)
+colnames(COuntry_)[3] <- "un"
+COUNTRY<-COuntry_%>%group_by(Ctry_Code)%>%summarise_all(funs(sum))
+
+study= subset(final_subset, select = c(Patent_co_filing,Ctry_Code))
+study_= bind_cols(study,un314)
+colnames(study_)[3] <- "Number_of_companies"
+colnames(study_)[2] <- "Ctry_Code"
+Study_countries<-study_%>%group_by(Ctry_Code)%>%summarise_all(funs(sum))
+colnames(Study_countries)[1] <- "Ctry_code"
+Study_countries<-Study_countries %>% drop_na(Patent_co_filing)
+Study_countries<-Study_countries %>% drop_na(Number_of_companies)
+study_without_us <- Study_countries[-24,]
+
+attach(Study_countries)
+par(family = "serif", mar = c(5, 4, 2, 0)+.1)
+plot(x = Number_of_companies, 
+     y = Patent_co_filing ,
+     xlim=c(0,160), ylim=c(0,60),
+     pch = 19,
+     cex = 0.7,
+     col = "darkblue",
+     main = "Number of co-filed patents according to the number of companies in a country",
+     sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+     xlab = "Number of companies",
+     ylab = "Number of co-filed patents",
+     bty = "n", axes = FALSE)
+axis (1, at=c(0,160), labels=c(0,160), pos=0, col="black", las=0, tck=-0.01)
+axis (2, at=c(0,60), labels=c(0,60), pos=0, col="black", las=2, tck=-0.01)
+attach(Study_countries)
+ggplot(Study_countries, aes(x=Number_of_companies, y=Patent_co_filing,  main = "Number of co-filed patents according to the number of companies in a country",
+                            sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+                            xlab = "Number of companies",
+                            ylab = "Number of co-filed patents"))+
+  geom_point() +
+  scale_colour_manual(values=c("blue"))+
+  geom_smooth(method="lm", colour="red") 
+
+attach(study_without_us)
+par(family = "serif", mar = c(5, 4, 2, 0)+.1)
+plot(x = Number_of_companies, 
+     y = Patent_co_filing ,
+     xlim=c(0,160), ylim=c(0,60),
+     pch = 19,
+     cex = 0.7,
+     col = "darkblue",
+     main = "Number of co-filed patents according to the number of companies in a country",
+     sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+     xlab = "Number of companies",
+     ylab = "Number of co-filed patents",
+     bty = "n", axes = FALSE)
+axis (1, at=c(0,160), labels=c(0,160), pos=0, col="black", las=0, tck=-0.01)
+axis (2, at=c(0,60), labels=c(0,60), pos=0, col="black", las=2, tck=-0.01)
+attach(study_without_us)
+ggplot(study_without_us, aes(x=Number_of_companies, y=Patent_co_filing,  main = "Number of co-filed patents according to the number of companies in a country",
+                            sub = "Source : Cor&Dip 2021", font.sub = 3, cex.sub = .8,
+                            xlab = "Number of companies",
+                            ylab = "Number of co-filed patents"))+
+  geom_point() +
+  scale_colour_manual(values=c("blue"))+
+  geom_smooth(method="lm", colour="red")
+
+#_______________________________________________________________________________________________________________________________________
+#### 13.1. Tests et régression ####
+#_______________________________________________________________________________________________________________________________________
+library(lmtest)
+library(car)
+library(skedastic)
+library(tseries)
+library(stargazer)
+
+lm1= lm(log(Number_of_patents) ~ log(`Co_filing_RD+1`), data=final_subset)
+summary(lm1)
+lmtest::bptest(lm1)
+bp1 <- lmtest::bptest(lm1)
+linearHypothesis(lm1,log(`Co_filing_RD+1`)=1, white.adjust = c(FALSE,TRUE,"hc3","hc0","hc1","hc2","hc4"))
+coeftest(lm1, vcov.=hccm(lm1, type="hc0"))
+o <- rstudent(lm1)
+plot(o, ylab= "Residuals")
+plot(lm1,2)
+jarque.bera.test(o)
+jb1 <- jarque.bera.test(o)
+stargazer(lm1, summary=TRUE, title="Descriptive Statistics", align=TRUE)
+
+lm2= lm(log(Number_of_patents) ~ log(RD_extern_simple), data = final_subset)
+lmtest::bptest(lm2)
+white_lm(lm2)
+summary(lm2)
+lmtest::bptest(lm2)
+coeftest(lm2, vcov.=hccm(lm2, type="hc0"))
+residuslm2 <- rstudent(lm2)
+plot(residuslm2, ylab= "Residuals")
+jarque.bera.test(residuslm2)
+plot(lm2,2)
+stargazer(lm2, summary=TRUE, title="Descriptive Statistics", align=TRUE)
+
+lm3= lm(log(Number_of_patents) ~ log(RD_extern_by_sector), data=final_subset)
+lmtest::bptest(lm3)
+summary(lm3)
+lmtest::bptest(lm3)
+coeftest(lm3, vcov.=hccm(lm3, type="hc0"))
+residuslm3 <- rstudent(lm3)
+plot(residuslm3, ylab= "Residuals")
+jarque.bera.test(residuslm3)
+plot(lm3,2)
+stargazer(lm3, summary=TRUE, title="Descriptive Statistics", align=TRUE)
+
+
+lm_total1=lm(log(Number_of_patents)~log(`SC_pubs+1`)+log(RD)+log(`Co_filing_RD+1`)+log(`EMP+1`)+Patent_co_filing+Patent_pool_participation, data=final_subset)
+summary(lm_total1)
+lmtest::bptest(lm_total1)
+coeftest(lm_total1, vcov.=hccm(lm_total1, type="hc0"))
+residus <- rstudent(lm_total1)
+plot(residus, ylab= "Residuals")
+jarque.bera.test(residus)
+plot(lm_total1,2)
+stargazer(lm_total1, summary=TRUE, title="log(Number_of_patents)~log(`SC_pubs+1`)+log(RD)+log(`RD_extern_C`)+log(`EMP+1`)+Patent_co_filing+Patent_pool_participation", align=TRUE)
+
+lm_total2=lm(log(Number_of_patents)~log(`SC_pubs+1`)+log(RD)+log(RD_extern_simple)+log(`EMP+1`)+Patent_co_filing+Patent_pool_participation, data=final_subset)
+summary(lm_total2)
+lmtest::bptest(lm_total2)
+coeftest(lm_total2, vcov.=hccm(lm_total2, type="hc0"))
+residus2 <- rstudent(lm_total2)
+plot(residus2, ylab= "Residuals")
+jarque.bera.test(residus2)
+plot(lm_total2,2)
+stargazer(lm_total2, summary=TRUE, title="log(Number_of_patents)~log(`SC_pubs+1`)+log(RD)+log(`RD_extern_A`)+log(`EMP+1`)+Patent_co_filing+Patent_pool_participation", align=TRUE)
+
+lm_total3=lm(log(Number_of_patents)~log(`SC_pubs+1`)+log(RD)+log(RD_extern_by_sector)+log(`EMP+1`)+Patent_co_filing+Patent_pool_participation, data=final_subset)
+lmtest::bptest(lm_total3)
+summary(lm_total3)
+coeftest(lm_total3, vcov. = hccm(lm_total3, type="hc0"))
+residus3 <- rstudent(lm_total3)
+plot(residus3, ylab= "Residuals")
+jarque.bera.test(residus3)
+plot(lm_total3,2)
+stargazer(lm_total3, summary=TRUE, title="log(Number_of_patents)~log(`SC_pubs+1`)+log(RD)+log(`RD_extern_B`)+log(`EMP+1`)+Patent_co_filing+Patent_pool_participation", align=TRUE)
+
+lm_without_RDextern=lm(log(Number_of_patents)~log(`SC_pubs+1`)+log(RD)+log(`EMP+1`)+Patent_co_filing+Patent_pool_participation, data=final_subset)
+lmtest::bptest(lm_without_RDextern)
+summary(lm_without_RDextern)
+coeftest(lm_without_RDextern, vcov. = hccm(lm_without_RDextern, type="hc0"))
+residus_without <- rstudent(lm_without_RDextern)
+plot(residus_without, ylab= "Residuals")
+jarque.bera.test(residus_without)
+plot(lm_without_RDextern,2)
+stargazer(lm_without_RDextern, summary=TRUE, title="", align=TRUE)
+
+lm_ppp=lm(log(Number_of_patents)~Patent_pool_participation, data=final_subset)
+lmtest::bptest(lm_ppp)
+summary(lm_ppp)
+coeftest(lm_ppp, vcov. = hccm(lm_ppp, type="hc0"))
+residus_ppp <- rstudent(lm_ppp)
+plot(residus_ppp, ylab= "Residuals")
+jarque.bera.test(residus_ppp)
+plot(lm_ppp,2)
+stargazer(lm_ppp, summary=TRUE, title="", align=TRUE)
+
+lm_scp=lm(log(Number_of_patents)~log(`SC_pubs+1`), data=final_subset)
+lmtest::bptest(lm_scp)
+summary(lm_scp)
+coeftest(lm_scp, vcov. = hccm(lm_scp, type="hc0"))
+residus_scp <- rstudent(lm_scp)
+plot(residus_scp, ylab= "Residuals")
+jarque.bera.test(residus_scp)
+plot(lm_scp,2)
+stargazer(lm_scp, summary=TRUE, title="", align=TRUE)
+
+#_____________________________________________________________________________________________________________________________________
+#### 13.2. Regressions 2 ####
+#_____________________________________________________________________________________________________________________________________
+model1=lm(log(Number_of_patents)~log(`SC_pubs+1`)+log(RD)+log(`EMP+1`), data=final_subset)
+lmtest::bptest(model1)
+summary(model1)
+coeftest(model1, vcov. = hccm(model1, type="hc0"))
+model1residus <- rstudent(model1)
+plot(model1residus, ylab= "Residuals")
+jarque.bera.test(model1residus)
+plot(model1,2)
+stargazer(model1, summary=TRUE, title="", align=TRUE)
+
+model2=lm(log(Number_of_patents)~log(`SC_pubs+1`)+log(RD)+log(`EMP+1`)+log(RD_extern_simple), data=final_subset)
+lmtest::bptest(model2)
+summary(model2)
+coeftest(model2, vcov. = hccm(model2, type="hc0"))
+model2residus <- rstudent(model2)
+plot(model2residus, ylab= "Residuals")
+jarque.bera.test(model2residus)
+plot(model2,2)
+stargazer(model2, summary=TRUE, title="", align=TRUE)
+
+model3=lm(log(Number_of_patents)~log(`SC_pubs+1`)+log(RD)+log(`EMP+1`)+log(RD_extern_by_sector), data=final_subset)
+lmtest::bptest(model3)
+summary(model3)
+coeftest(model3, vcov. = hccm(model3, type="hc0"))
+model3residus <- rstudent(model3)
+plot(model3residus, ylab= "Residuals")
+jarque.bera.test(model3residus)
+plot(model3,2)
+stargazer(model3, summary=TRUE, title="", align=TRUE)
+
+model4=lm(log(Number_of_patents)~log(`SC_pubs+1`)+log(RD)+log(`EMP+1`)+log(`Co_filing_RD+1`), data=final_subset)
+lmtest::bptest(model4)
+summary(model4)
+coeftest(model4, vcov. = hccm(model4, type="hc0"))
+model4residus <- rstudent(model4)
+plot(model4residus, ylab= "Residuals")
+jarque.bera.test(model4residus)
+plot(model4,2)
+stargazer(model4, summary=TRUE, title="", align=TRUE)
+
+model5=lm(log(Number_of_patents)~log(`SC_pubs+1`)+log(RD)+log(`EMP+1`)+Patent_co_filing, data=final_subset)
+lmtest::bptest(model5)
+summary(model5)
+coeftest(model5, vcov. = hccm(model5, type="hc0"))
+model5residus <- rstudent(model5)
+plot(model5residus, ylab= "Residuals")
+jarque.bera.test(model4residus)
+plot(model5,2)
+stargazer(model5, summary=TRUE, title="", align=TRUE)
+
+model6=lm(log(Number_of_patents)~log(`SC_pubs+1`)+log(RD)+log(`EMP+1`)+Patent_pool_participation, data=final_subset)
+lmtest::bptest(model6)
+summary(model6)
+coeftest(model6, vcov. = hccm(model6, type="hc0"))
+model6residus <- rstudent(model6)
+plot(model6residus, ylab= "Residuals")
+jarque.bera.test(model6residus)
+plot(model6,2)
+stargazer(model6, summary=TRUE, title="", align=TRUE)
+
+lm_total1=lm(log(Number_of_patents)~log(`SC_pubs+1`)+log(RD)+log(`Co_filing_RD+1`)+log(`EMP+1`)+Patent_co_filing+Patent_pool_participation, data=final_subset)
+summary(lm_total1)
+lmtest::bptest(lm_total1)
+coeftest(lm_total1, vcov.=hccm(lm_total1, type="hc0"))
+residus <- rstudent(lm_total1)
+plot(residus, ylab= "Residuals")
+jarque.bera.test(residus)
+plot(lm_total1,2)
+stargazer(lm_total1, summary=TRUE, title="", align=TRUE)
+
+lm_total2=lm(log(Number_of_patents)~log(`SC_pubs+1`)+log(RD)+log(RD_extern_simple)+log(`EMP+1`)+Patent_co_filing+Patent_pool_participation, data=final_subset)
+summary(lm_total2)
+lmtest::bptest(lm_total2)
+coeftest(lm_total2, vcov.=hccm(lm_total2, type="hc0"))
+residus2 <- rstudent(lm_total2)
+plot(residus2, ylab= "Residuals")
+jarque.bera.test(residus2)
+plot(lm_total2,2)
+stargazer(lm_total2, summary=TRUE, title="", align=TRUE)
+
+lm_total3=lm(log(Number_of_patents)~log(`SC_pubs+1`)+log(RD)+log(RD_extern_by_sector)+log(`EMP+1`)+Patent_co_filing+Patent_pool_participation, data=final_subset)
+lmtest::bptest(lm_total3)
+summary(lm_total3)
+coeftest(lm_total3, vcov. = hccm(lm_total3, type="hc0"))
+residus3 <- rstudent(lm_total3)
+plot(residus3, ylab= "Residuals")
+jarque.bera.test(residus3)
+plot(lm_total3,2)
+stargazer(lm_total3, summary=TRUE, title="", align=TRUE)
+
+stargazer(model1, model2, model3, model4, model5, model6, lm_total1, lm_total2, lm_total3, summary=TRUE, title="", align=TRUE)
+#_______________________________________________________________________________________________________________________________________________
+#### 14.Corrélations ####
+#_______________________________________________________________________________________________________________________________________
+attach(final_subset)
+graphConso <- function(uneVariable){
+  ggplot(data = final_subset, aes_string(x = uneVariable , y = "Number_of_patents")) + geom_point() + geom_smooth()
+}
+p1 <- graphConso("`SC_pubs+1`")
+p2 <- graphConso("RD")
+p3 <- graphConso("`Co_filing_RD+1`")
+p4 <- graphConso("`EMP+1`")
+p5 <- graphConso("RD_extern_simple")
+p6 <- graphConso("RD_extern_by_sector")
+
+library(gridExtra)
+grid.arrange(p1, p2, p3, p4, p5, p6, ncol = 2)
+
+ggplot(data = final_subset, aes(x =`Co_filing_RD+1` , y = Number_of_patents, group = as.factor(Patent_co_filing), col = as.factor(Patent_co_filing))) +
+  geom_point() + geom_smooth() +
+  scale_colour_discrete("Number_of_patents", labels = c("Co_filing_RD+1", "Patent_co_filing"))
+
+graphConso.bp <- function(uneVariable){
+  ggplot(data = final_subset, aes_string(x = "factor(0)", y = uneVariable)) +
+    geom_boxplot() + xlab("")
+}
+
+p1.bp <- graphConso.bp("`SC_pubs+1`")
+p2.bp <- graphConso.bp("RD")
+p3.bp <- graphConso.bp("`Co_filing_RD+1`")
+p4.bp <- graphConso.bp("`EMP+1`")
+p5.bp <- graphConso.bp("Patent_co_filing")
+p6.bp <- graphConso.bp("Patent_pool_participation")
+
+grid.arrange(p1.bp, p2.bp, p3.bp, p4.bp, p5.bp, p6.bp, ncol = 2)
+
+regression10 <- subset(final_subset, select = c(-Ctry_Code, -Company_name, -NACE2, -ISIC4, -Year, -Company_id))
+colnames(regression10)[2] <- "RD_extern_A"
+colnames(regression10)[4] <- "RD_extern_B"
+colnames(regression10)[7] <- "RD_extern_C"
+cor(regression10)
+library(corrplot)
+library(RColorBrewer)
+corrplot.mixed(cor(regression10),  upper = "shade", lower = "number",
+               tl.pos = "lt", tl.col = "black", tl.offset=1, tl.srt = 90, bg="white",
+               lower.col = "black")
+
+graphConso <- function(uneVariable){
+  ggplot(data = regression10, aes_string(x = uneVariable , y = "Number_of_patents")) + geom_point() + geom_smooth()
+}
+p1 <- graphConso("`SC_pubs+1`")
+p2 <- graphConso("RD")
+p3 <- graphConso("RD_extern_A")
+p4 <- graphConso("`EMP+1`")
+p5 <- graphConso("RD_extern_B")
+p6 <- graphConso("RD_extern_C")
+
+library(gridExtra)
+grid.arrange(p1, p2, p3, p4, p5, p6, ncol = 2)
+
+graphConso <- function(uneVariable){
+  ggplot(data = regression10, aes_string(x = uneVariable , y = "Number_of_patents")) + geom_point() + geom_smooth()
+}
+p2 <- graphConso("RD")
+p3 <- graphConso("RD_extern_A")
+p5 <- graphConso("RD_extern_B")
+p6 <- graphConso("RD_extern_C")
+
+library(gridExtra)
+grid.arrange(p2, p3, p5, p6, ncol = 2)
+
+regression10_21=subset(final_subset, Company_id %in% subset21_company, select= c(-Ctry_Code, -Company_name, -NACE2, -ISIC4, -Year, -Company_id))
+colnames(regression10_21)[2] <- "RD_extern_A"
+colnames(regression10_21)[4] <- "RD_extern_B"
+colnames(regression10_21)[7] <- "RD_extern_C"
+regression10_72=subset(final_subset, Company_id %in% subset72_company, select= c(-Ctry_Code, -Company_name, -NACE2, -ISIC4, -Year, -Company_id))
+colnames(regression10_72)[2] <- "RD_extern_A"
+colnames(regression10_72)[4] <- "RD_extern_B"
+colnames(regression10_72)[7] <- "RD_extern_C"
+
+graphConso <- function(uneVariable){
+  ggplot(data = regression10_21, aes_string(x = uneVariable , y = "Number_of_patents")) + geom_point() + geom_smooth()
+}
+p221 <- graphConso("RD")
+p321 <- graphConso("RD_extern_A")
+p521 <- graphConso("RD_extern_B")
+p621 <- graphConso("RD_extern_C")
+
+library(gridExtra)
+grid.arrange(p221, p321, p521, p621, ncol = 2)
+
+graphConso <- function(uneVariable){
+  ggplot(data = regression10_72, aes_string(x = uneVariable , y = "Number_of_patents")) + geom_point() + geom_smooth()
+}
+p272 <- graphConso("RD")
+p372 <- graphConso("RD_extern_A")
+p572 <- graphConso("RD_extern_B")
+p672 <- graphConso("RD_extern_C")
+
+library(gridExtra)
+grid.arrange(p272, p372, p572, p672, ncol = 2)
+
+graphConso <- function(uneVariable){
+  ggplot(data = regression10, aes_string(x = uneVariable , y = "Number_of_patents")) + geom_point() + geom_smooth()
+}
+p1 <- graphConso("`SC_pubs+1`")
+p2 <- graphConso("RD")
+p4 <- graphConso("`EMP+1`")
+
+library(gridExtra)
+grid.arrange(p1, p2, p4, ncol = 2)
+
+#_______________________________________________________________________________________________________________________________________
+#### 15.Stats descriptives ####
+#_______________________________________________________________________________________________________________________________________
+library(psych) 
+des=describe(regression10)
+library(stargazer)
+stargazer(regression10, summary=TRUE, title="Descriptive Statistics", align=TRUE)
+
+attach(final_subset)
+sum(Patent_co_filing)
+y=subset(final_subset, Company_id %in% co_filers, select= c(Patent_co_filing, Number_of_patents))
+attach(y)
+mean(Number_of_patents)
+ybis=subset(final_subset, Patent_co_filing==0 , select= c(Patent_co_filing, Number_of_patents))
+attach(ybis)
+mean(Number_of_patents)
+
+#_______________________________________________________________________________________________________________________________________
+#### 16.analyse géographique ####
+#_______________________________________________________________________________________________________________________________________
+attach(final_subset)
+pays <- subset(final_subset, select= c(Ctry_Code, Patent_co_filing))
+coop_country3=bind_cols(pays,un314)
+colnames(coop_country3)[3]<-"Company_number"
+COUNTRY_b<-coop_country3%>%group_by(Ctry_Code)%>%summarise_all(funs(sum))
+attach(COUNTRY_b)
+sum(Company_number)
+pays2 <- subset(X2021_COR_DIP_company_list, select= c(Ctry_Code, Company_id))
+payspays <- merge(Codep_1_, pays2, by="Company_id", all=TRUE)
+payspays2 <- payspays %>% drop_na(codep)
+pays3 <- subset(X2021_COR_DIP_company_list, select= c(Ctry_Code, Company_id))
+colnames(pays3)[2]<-"codep"
+payspays3 <- merge(payspays2, pays3, by="codep", all=TRUE)
+payspays3_sans_NA <- payspays3 %>% drop_na(Company_id)
+un4946=rep(1, 4946)
+pc<-bind_cols(payspays3_sans_NA,un4946)
+colnames(pc)[5]="un"
+attach(pc)
+ft = Ctry_Code.x==Ctry_Code.y
+pc1<-bind_cols(pc, ft)
+colnames(pc1)[6]<- "collaboration"
+pc10<- pc1[, "collaboration", drop=FALSE]
+names(pc1)[FALSE] <- paste("0")
+attach(pc1)
+listft=list()
+for (j in pc1$Ctry_Code.x)
+for (k in pc1$Ctry_Code.y){
+if (j==k){
+  pc1$un=0
+}
+else{pc1$un=1}
+}
+as.logical(pc1$collaboration)
+cols <- sapply(pc1, is.logical)
+pc1[,cols] <- lapply(pc1[,cols], as.numeric)
